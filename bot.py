@@ -5,9 +5,6 @@ import socketserver
 import discord
 import aiohttp
 
-# ---------------------------------------------------------
-# RenderのFreeプラン（Web Service）でポートタイムアウトを防ぐためのダミーサーバー
-# ---------------------------------------------------------
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
     handler = http.server.SimpleHTTPRequestHandler
@@ -16,11 +13,8 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# ---------------------------------------------------------
-# Discord Bot 設定
-# ---------------------------------------------------------
 intents = discord.Intents.default()
-intents.message_content = True  # Message Content Intent
+intents.message_content = True
 
 client = discord.Client(intents=intents)
 
@@ -33,19 +27,16 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # 自分自身（Gemini Bot自身）の発言は無限ループ防止のため無視
+    # 自分自身のメッセージは無視
     if message.author.id == client.user.id:
         return
 
-    # 受信メッセージをログ出力
     print(f"[Message Received] Author: {message.author}, Content: '{message.content}'")
 
-    # メッセージ本文に「ゲミナイ」が含まれているか判別（プレフィックス判定）
-    # ※DiscordSRV経由の場合「<m4ru_ha> ゲミナイ テスト」や「m4ru_ha: ゲミナイ テスト」の形式で届くため in 判定を行っています
+    # メッセージ内に「ゲミナイ」が含まれているか判定
     if "ゲミナイ" in message.content:
         print("[Match] 'ゲミナイ' を検知しました。")
         
-        # 「ゲミナイ」以降の文字列を質問文として抽出
         idx = message.content.find("ゲミナイ")
         user_input = message.content[idx + 4:].strip()
         print(f"[Extracted Query] '{user_input}'")
@@ -79,7 +70,6 @@ async def on_message(message):
                         if response.status == 200:
                             data = await response.json()
                             answer = data.get("answer", "返答を取得できませんでした。")
-                            # ログチャンネルへ返信（DiscordSRVが自動でマイクラ内へ転送します）
                             await message.channel.send(answer)
                         else:
                             error_text = await response.text()
