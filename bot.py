@@ -3,7 +3,7 @@ import threading
 import http.server
 import socketserver
 import discord
-import aiohttp  # 非同期HTTPリクエスト用に変更
+import aiohttp
 
 # ---------------------------------------------------------
 # RenderのFreeプラン（Web Service）でポートタイムアウトを防ぐためのダミーサーバー
@@ -14,18 +14,16 @@ def run_dummy_server():
     with socketserver.TCPServer(("", port), handler) as httpd:
         httpd.serve_forever()
 
-# ダミーサーバーをバックグラウンドで起動
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # ---------------------------------------------------------
 # Discord Bot 設定
 # ---------------------------------------------------------
 intents = discord.Intents.default()
-intents.message_content = True  # 特権インテント（Message Content Intent）
+intents.message_content = True  # Message Content Intent
 
 client = discord.Client(intents=intents)
 
-# 環境変数の取得
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 DIFY_API_KEY = os.environ.get("DIFY_API_KEY")
 
@@ -35,26 +33,27 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # 自分自身（Gemini Bot自身）の発言だけを無視する
+    # 自分自身（Gemini Bot自身）の発言は無限ループ防止のため無視
     if message.author.id == client.user.id:
         return
 
-    # 受信メッセージをログに出力（logMonなどの他のBotの発言も出力されます）
-    print(f"[Message Received] Author: {message.author} (Bot: {message.author.bot}), Content: '{message.content}'")
+    # 受信メッセージをログ出力
+    print(f"[Message Received] Author: {message.author}, Content: '{message.content}'")
 
-    # コマンド判定 (ゲミナイ から始まるメッセージ)
-    if message.content.startswith("ゲミナイ"):
-        print("[Match] 'ゲミナイ' コマンドを検知しました。")
+    # メッセージ本文に「ゲミナイ」が含まれているか判別（プレフィックス判定）
+    # ※DiscordSRV経由の場合「<m4ru_ha> ゲミナイ テスト」や「m4ru_ha: ゲミナイ テスト」の形式で届くため in 判定を行っています
+    if "ゲミナイ" in message.content:
+        print("[Match] 'ゲミナイ' を検知しました。")
         
-        # プロンプトの抽出 ("ゲミナイ" の4文字分をカット)
-        user_input = message.content[4:].strip()
+        # 「ゲミナイ」以降の文字列を質問文として抽出
+        idx = message.content.find("ゲミナイ")
+        user_input = message.content[idx + 4:].strip()
         print(f"[Extracted Query] '{user_input}'")
         
         if not user_input:
-            await message.channel.send("質問内容を入力してください。（例: `ゲミナイ こんにちは`）")
+            await message.channel.send("質問内容を入力してください。（例: `ゲミナイ かまどの作り方は？`）")
             return
 
-        # Dify API へのリクエスト処理
         headers = {
             "Authorization": f"Bearer {DIFY_API_KEY}",
             "Content-Type": "application/json"
@@ -69,7 +68,6 @@ async def on_message(message):
 
         try:
             async with message.channel.typing():
-                # aiohttp を使って非同期で Dify API を呼び出す（タイムアウト回避）
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         "https://api.dify.ai/v1/chat-messages",
@@ -81,17 +79,17 @@ async def on_message(message):
                         if response.status == 200:
                             data = await response.json()
                             answer = data.get("answer", "返答を取得できませんでした。")
+                            # ログチャンネルへ返信（DiscordSRVが自動でマイクラ内へ転送します）
                             await message.channel.send(answer)
                         else:
                             error_text = await response.text()
                             print(f"[Dify API Error] Code: {response.status}, Response: {error_text}")
-                            await message.channel.send("エラーが発生しました。Difyの設定やAPIキーを確認してください。")
+                            await message.channel.send("エラーが発生しました。Difyの設定を確認してください。")
 
         except Exception as e:
             print(f"[Exception Error] {e}")
             await message.channel.send("処理中にエラーが発生しました。")
 
-# Botの起動
 if __name__ == "__main__":
     if DISCORD_TOKEN:
         client.run(DISCORD_TOKEN)
