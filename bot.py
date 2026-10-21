@@ -18,6 +18,7 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 intents = discord.Intents.default()
 intents.message_content = True
 
+# ★修正：@client.eventより先にclientを定義する
 client = discord.Client(intents=intents)
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
