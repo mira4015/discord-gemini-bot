@@ -67,7 +67,7 @@ async def on_message(message):
                     "https://api.dify.ai/v1/chat-messages",
                     headers=headers,
                     json=payload,
-                    timeout=30
+                    timeout=60
                 )
                 
                 if response.status_code == 200:
