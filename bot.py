@@ -1,90 +1,72 @@
 import os
-import threading
-import http.server
-import socketserver
 import discord
+from discord.ext import commands
 import requests
 
-# ---------------------------------------------------------
-# RenderのFreeプラン（Web Service）でポートタイムアウトを防ぐためのダミーサーバー
-# ---------------------------------------------------------
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 10000))
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        httpd.serve_forever()
+# Discord Bot のトークンと Dify の API キー/URL（環境変数から取得、または直接記述）
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "YOUR_DISCORD_BOT_TOKEN")
+DIFY_API_KEY = os.getenv("DIFY_API_KEY", "YOUR_DIFY_API_KEY")
+DIFY_API_URL = os.getenv("DIFY_API_URL", "https://api.dify.ai/v1/chat-messages")
 
-# ダミーサーバーをバックグラウンドで起動
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-# ---------------------------------------------------------
-# Discord Bot 設定
-# ---------------------------------------------------------
 intents = discord.Intents.default()
-intents.message_content = True  # 特権インテント（Message Content Intent）
+intents.message_content = True
 
-client = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 環境変数の取得
-DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-DIFY_API_KEY = os.environ.get("DIFY_API_KEY")
 
-@client.event
+@bot.event
 async def on_ready():
-    print(f"ログインしました: {client.user}")
+    print(f"Logged in as {bot.user.name}")
 
-@client.event
+
+@bot.event
 async def on_message(message):
-    # Bot自身の発言には反応しない
-    if message.author == client.user:
+    # Bot自身の発言は無視
+    if message.author.bot:
         return
 
-    # コマンド判定 (ゲミナイ から始まるメッセージ)
-    if message.content.startswith("ゲミナイ"):
-        # プロンプトの抽出 ("ゲミナイ" の4文字分をカット)
-        user_input = message.content[4:].strip()
-        
-        if not user_input:
-            await message.channel.send("質問内容を入力してください。（例: `ゲミナイ こんにちは`）")
+    # Botへのメンションが含まれているかチェック
+    if bot.user in message.mentions:
+        # メンション部分を削除してメッセージ本文を抽出
+        user_query = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+
+        if not user_query:
+            await message.channel.send("質問内容を入力してください。")
             return
 
-        # Dify API へのリクエスト処理
-        headers = {
-            "Authorization": f"Bearer {DIFY_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "inputs": {},
-            "query": user_input,
-            "response_mode": "blocking",
-            "user": f"discord_{message.author.id}"
-        }
+        async with message.channel.typing():
+            try:
+                # Dify API リクエスト設定
+                headers = {
+                    "Authorization": f"Bearer {DIFY_API_KEY}",
+                    "Content-Type": "application/json"
+                }
 
-        try:
-            async with message.channel.typing():
-                response = requests.post(
-                    "https://api.dify.ai/v1/chat-messages",
-                    headers=headers,
-                    json=payload,
-                    timeout=60
-                )
-                
+                # 一問一答形式のため conversation_id は一切含めない
+                payload = {
+                    "inputs": {},
+                    "query": user_query,
+                    "response_mode": "blocking",
+                    "user": str(message.author.id)
+                }
+
+                # Dify API への送信
+                response = requests.post(DIFY_API_URL, json=payload, headers=headers, timeout=60)
+
                 if response.status_code == 200:
                     data = response.json()
-                    answer = data.get("answer", "返答を取得できませんでした。")
-                    await message.channel.send(answer)
+                    answer = data.get("answer", "回答を取得できませんでした。")
+                    await message.reply(answer)
                 else:
                     print(f"Dify API Error: {response.status_code} - {response.text}")
-                    await message.channel.send("エラーが発生しました。Difyの設定やAPIキーを確認してください。")
+                    await message.reply("エラーが発生しました。Difyの設定やAPIキーを確認してください。")
 
-        except Exception as e:
-            print(f"Exception: {e}")
-            await message.channel.send("処理中にエラーが発生しました。")
+            except Exception as e:
+                print(f"Exception: {e}")
+                await message.reply("通信エラーが発生しました。しばらく経ってからやり直してください。")
 
-# Botの起動
+    await bot.process_commands(message)
+
+
 if __name__ == "__main__":
-    if DISCORD_TOKEN:
-        client.run(DISCORD_TOKEN)
-    else:
-        print("エラー: DISCORD_TOKEN が設定されていません。")
+    bot.run(DISCORD_TOKEN)
