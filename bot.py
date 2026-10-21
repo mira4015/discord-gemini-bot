@@ -15,15 +15,13 @@ def home():
     return "Bot is alive!"
 
 def run_web_server():
-    # Renderが割り当てるPORT番号を取得（デフォルト8080）
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# スレッドでダミーWebサーバーを起動
 threading.Thread(target=run_web_server, daemon=True).start()
 
 # --------------------------------------------------
-# Discord Bot 処理（ステートレス・一問一答型）
+# Discord Bot 処理
 # --------------------------------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "YOUR_DISCORD_BOT_TOKEN")
 DIFY_API_KEY = os.getenv("DIFY_API_KEY", "YOUR_DIFY_API_KEY")
@@ -40,14 +38,23 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    # Bot自身の発言は無視
     if message.author.bot:
         return
 
-    if bot.user in message.mentions:
-        user_query = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    # 1. Botへのメンションが含まれているか
+    # 2. メッセージ本文に「ゲミナイ」が含まれているか
+    is_mentioned = bot.user in message.mentions
+    contains_keyword = "ゲミナイ" in message.content or "ゲミ" in message.content
+
+    if is_mentioned or contains_keyword:
+        # メンション表記やキーワードを取り除いて質問文を抽出
+        user_query = message.content
+        user_query = user_query.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "")
+        user_query = user_query.replace("ゲミナイ", "").strip()
 
         if not user_query:
-            await message.channel.send("質問内容を入力してください。")
+            await message.channel.send("はい！何かご質問ですか？")
             return
 
         async with message.channel.typing():
@@ -57,7 +64,7 @@ async def on_message(message):
                     "Content-Type": "application/json"
                 }
 
-                # 一問一答形式（conversation_idなし）
+                # ステートレス一問一答（conversation_idなし）
                 payload = {
                     "inputs": {},
                     "query": user_query,
