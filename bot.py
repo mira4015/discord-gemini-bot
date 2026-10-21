@@ -3,7 +3,7 @@ import threading
 import http.server
 import socketserver
 import discord
-import requests
+import aiohttp  # 非同期HTTPリクエスト用に変更
 
 # ---------------------------------------------------------
 # RenderのFreeプラン（Web Service）でポートタイムアウトを防ぐためのダミーサーバー
@@ -35,12 +35,12 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # Bot自身の発言には反応しない
-    if message.author == client.user:
+    # 自分自身（Gemini Bot自身）の発言だけを無視する
+    if message.author.id == client.user.id:
         return
 
-    # 受信メッセージをログに出力（メッセージ取得確認用）
-    print(f"[Message Received] Author: {message.author}, Content: '{message.content}'")
+    # 受信メッセージをログに出力（logMonなどの他のBotの発言も出力されます）
+    print(f"[Message Received] Author: {message.author} (Bot: {message.author.bot}), Content: '{message.content}'")
 
     # コマンド判定 (ゲミナイ から始まるメッセージ)
     if message.content.startswith("ゲミナイ"):
@@ -69,20 +69,23 @@ async def on_message(message):
 
         try:
             async with message.channel.typing():
-                response = requests.post(
-                    "https://api.dify.ai/v1/chat-messages",
-                    headers=headers,
-                    json=payload,
-                    timeout=60
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    answer = data.get("answer", "返答を取得できませんでした。")
-                    await message.channel.send(answer)
-                else:
-                    print(f"[Dify API Error] Code: {response.status_code}, Response: {response.text}")
-                    await message.channel.send("エラーが発生しました。Difyの設定やAPIキーを確認してください。")
+                # aiohttp を使って非同期で Dify API を呼び出す（タイムアウト回避）
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://api.dify.ai/v1/chat-messages",
+                        headers=headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=60)
+                    ) as response:
+                        
+                        if response.status == 200:
+                            data = await response.json()
+                            answer = data.get("answer", "返答を取得できませんでした。")
+                            await message.channel.send(answer)
+                        else:
+                            error_text = await response.text()
+                            print(f"[Dify API Error] Code: {response.status}, Response: {error_text}")
+                            await message.channel.send("エラーが発生しました。Difyの設定やAPIキーを確認してください。")
 
         except Exception as e:
             print(f"[Exception Error] {e}")
