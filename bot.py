@@ -1,30 +1,3 @@
-import os
-import threading
-import http.server
-import socketserver
-import discord
-import aiohttp
-
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 10000))
-    handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        httpd.serve_forever()
-
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-client = discord.Client(intents=intents)
-
-DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-DIFY_API_KEY = os.environ.get("DIFY_API_KEY")
-
-@client.event
-async def on_ready():
-    print(f"ログインしました: {client.user}")
-
 @client.event
 async def on_message(message):
     # 自分自身のメッセージは無視
@@ -79,9 +52,3 @@ async def on_message(message):
         except Exception as e:
             print(f"[Exception Error] {e}")
             await message.channel.send("処理中にエラーが発生しました。")
-
-if __name__ == "__main__":
-    if DISCORD_TOKEN:
-        client.run(DISCORD_TOKEN)
-    else:
-        print("エラー: DISCORD_TOKEN が設定されていません。")
