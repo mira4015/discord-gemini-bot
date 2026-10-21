@@ -39,10 +39,10 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    # コマンド判定 (!gemini から始まるメッセージ)
+    # コマンド判定 (ゲミナイ から始まるメッセージ)
     if message.content.startswith("ゲミナイ"):
-        # プロンプトの抽出
-        user_input = message.content[7:].strip()
+        # プロンプトの抽出 ("ゲミナイ" の4文字分をカット)
+        user_input = message.content[4:].strip()
         
         if not user_input:
             await message.channel.send("質問内容を入力してください。（例: `ゲミナイ こんにちは`）")
@@ -58,7 +58,7 @@ async def on_message(message):
             "inputs": {},
             "query": user_input,
             "response_mode": "blocking",
-            "user": str(message.author.id)
+            "user": f"discord_{message.author.id}"
         }
 
         try:
