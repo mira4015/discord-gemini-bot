@@ -40,12 +40,12 @@ async def on_message(message):
         return
 
     # コマンド判定 (!gemini から始まるメッセージ)
-    if message.content.startswith("!gemini"):
+    if message.content.startswith("!gem"):
         # プロンプトの抽出
         user_input = message.content[7:].strip()
         
         if not user_input:
-            await message.channel.send("質問内容を入力してください。（例: `!gemini こんにちは`）")
+            await message.channel.send("質問内容を入力してください。（例: `!gem こんにちは`）")
             return
 
         # Dify API へのリクエスト処理
